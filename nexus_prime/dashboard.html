@@ -21,7 +21,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b4c8e8}
 <section class="panel"><h2>Create Mission</h2><label for="agent">Assign agent</label><select id="agent"></select>
 <label for="goal">Mission objective</label><textarea id="goal" rows="4" maxlength="4000" placeholder="Describe what you want to build or investigate..."></textarea>
 <label><input type="checkbox" id="use_ai"> Use configured AI model for planning</label><p>AI planning only; no code changes or deployments are executed.</p><button id="run">Generate Mission Plan</button><pre id="output" aria-live="polite"></pre></section>
-<section class="panel"><h2>Project Memory</h2><input id="project" placeholder="Project name"><textarea id="note" placeholder="Remember a project decision or note"></textarea><button id="save-note">Save Note</button><button id="find-notes">Search Notes</button><pre id="notes-output"></pre></section><section class="panel"><h2>GitHub Intelligence (read-only)</h2><input id="repo" placeholder="owner/repository"><button id="inspect">Inspect Repository</button><pre id="repo-output"></pre></section><section class="panel"><h2>Mission History</h2><div id="history">No missions yet.</div></section></main>
+<section class="panel"><h2>Multi-Agent Mission</h2><p>Six agents coordinate on one plan. No code is executed.</p><textarea id="team-goal" rows="3" maxlength="4000" placeholder="Mission for the whole team"></textarea><label><input type="checkbox" id="team-ai"> Use configured AI provider</label><p><button id="team-run">Coordinate Agents</button></p><pre id="team-output" aria-live="polite"></pre></section><section class="panel"><h2>Project Memory</h2><input id="project" placeholder="Project name"><textarea id="note" placeholder="Remember a project decision or note"></textarea><button id="save-note">Save Note</button><button id="find-notes">Search Notes</button><pre id="notes-output"></pre></section><section class="panel"><h2>GitHub Intelligence (read-only)</h2><input id="repo" placeholder="owner/repository"><button id="inspect">Inspect Repository</button><pre id="repo-output"></pre></section><section class="panel"><h2>Mission History</h2><div id="history">No missions yet.</div></section></main>
 <script>
 const $=id=>document.getElementById(id);
 async function load(){
@@ -60,6 +60,14 @@ $('inspect').onclick=async()=>{
  if(parts.length!==2){$('repo-output').textContent='Enter owner/repository';return;}
  const r=await fetch('/api/github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({owner:parts[0],repo:parts[1]})});
  $('repo-output').textContent=JSON.stringify(await r.json(),null,2);
+};
+$('team-run').onclick=async()=>{
+ $('team-output').textContent='Planning mission...';
+ try{
+  const r=await fetch('/api/orchestrate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal:$('team-goal').value,use_ai:$('team-ai').checked})});
+  const data=await r.json();
+  $('team-output').textContent=r.ok?data.orchestration.summary:data.error;
+ }catch(e){$('team-output').textContent=e.message;}
 };
 load().catch(e=>$('output').textContent=e.message);
 </script></html>
