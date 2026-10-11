@@ -8,6 +8,7 @@ from .core import AGENTS, Coordinator
 from .memory import Memory
 from .intelligence import reason
 from .github_intel import inspect
+from .orchestrator import Orchestrator
 
 coordinator = Coordinator()
 memory = Memory(os.getenv("NEXUS_DB_PATH", "nexus_prime.db"))
@@ -49,7 +50,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        if path not in ("/api/missions", "/api/notes", "/api/github"):
+        if path not in ("/api/missions", "/api/notes", "/api/github", "/api/orchestrate"):
             return self.respond(404, {"error": "Not found"})
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -68,6 +69,9 @@ class Handler(BaseHTTPRequestHandler):
                         mission.result = "AI provider request failed. No external action was performed."
                 memory.save_mission(mission)
                 return self.respond(201, {"mission": vars(mission)})
+            if path == "/api/orchestrate":
+                result = Orchestrator().run(body["goal"], use_ai=body.get("use_ai") is True, context=body.get("context", ""), max_agents=body.get("max_agents", 6))
+                return self.respond(200, {"orchestration": result})
             if path == "/api/notes":
                 memory.add_note(body["project"][:100], body["body"])
                 return self.respond(201, {"saved": True})
