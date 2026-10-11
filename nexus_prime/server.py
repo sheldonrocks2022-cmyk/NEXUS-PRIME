@@ -9,9 +9,11 @@ from .memory import Memory
 from .intelligence import reason
 from .github_intel import inspect
 from .orchestrator import Orchestrator
+from .governance import Governance
 
 coordinator = Coordinator()
 memory = Memory(os.getenv("NEXUS_DB_PATH", "nexus_prime.db"))
+governance = Governance(os.getenv("NEXUS_DB_PATH", "nexus_prime.db"))
 DASHBOARD = Path(__file__).with_name("dashboard.html").read_bytes()
 
 class Handler(BaseHTTPRequestHandler):
@@ -25,7 +27,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def trusted_request(self):
+        host = self.headers.get("Host", "")
+        origin = self.headers.get("Origin", "")
+        return host in ("127.0.0.1:8765", "localhost:8765") and (not origin or origin in ("http://127.0.0.1:8765", "http://localhost:8765"))
+
     def do_GET(self):
+        if not self.trusted_request():
+            return self.respond(403, {"error": "Local requests only"})
         parsed = urlsplit(self.path)
         if parsed.path == "/":
             self.send_response(200)
@@ -43,14 +52,18 @@ class Handler(BaseHTTPRequestHandler):
             project = params.get("project", [""])[0][:100]
             query = params.get("query", [""])[0][:200]
             self.respond(200, {"notes": memory.search_notes(project, query)})
+        elif parsed.path == "/api/proposals":
+            self.respond(200, {"proposals": governance.list()})
         elif parsed.path == "/api/health":
             self.respond(200, {"status": "ready", "agents": len(AGENTS), "ai_configured": bool(os.getenv("NEXUS_API_KEY") and os.getenv("NEXUS_MODEL"))})
         else:
             self.respond(404, {"error": "Not found"})
 
     def do_POST(self):
+        if not self.trusted_request():
+            return self.respond(403, {"error": "Local requests only"})
         path = urlsplit(self.path).path
-        if path not in ("/api/missions", "/api/notes", "/api/github", "/api/orchestrate"):
+        if path not in ("/api/missions", "/api/notes", "/api/github", "/api/orchestrate", "/api/proposals", "/api/decisions"):
             return self.respond(404, {"error": "Not found"})
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -59,6 +72,10 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(size))
             if not isinstance(body, dict):
                 raise ValueError("Expected JSON object")
+            if path == "/api/proposals":
+                return self.respond(201, {"proposal": governance.submit(body["action"], body["summary"], body["target"])})
+            if path == "/api/decisions":
+                return self.respond(200, {"proposal": governance.decide(body["id"], body["decision"])})
             if path == "/api/missions":
                 mission = coordinator.create(body["goal"], body.get("agent", "prime"))
                 coordinator.plan(mission.id)
@@ -77,7 +94,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(201, {"saved": True})
             if path == "/api/github":
                 return self.respond(200, {"repository": inspect(body["owner"], body["repo"])})
-        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            self.respond(400, {"error": str(exc)})
+        except KeyError as exc:
+            self.respond(400, {"error": "Missing field or proposal: " + str(exc)})
             self.respond(400, {"error": str(exc)})
         except Exception:
             self.respond(502, {"error": "External read failed"})
