@@ -11,7 +11,7 @@ p{color:#9caecc} .panel{background:#101a30;border:1px solid #293958;border-radiu
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
 .agent{background:#17243c;border:1px solid #304568;border-radius:12px;padding:16px}
 .agent b{color:#7dd9ff} .agent p{font-size:13px;margin-bottom:0}
-textarea,select{box-sizing:border-box;width:100%;background:#0b1427;color:#fff;border:1px solid #425879;border-radius:10px;padding:12px;margin:8px 0}
+textarea,select,input:not([type=checkbox]){box-sizing:border-box;width:100%;background:#0b1427;color:#fff;border:1px solid #425879;border-radius:10px;padding:12px;margin:8px 0}
 button{background:#53a9ff;border:0;color:#061325;font-weight:800;border-radius:10px;padding:13px 22px;cursor:pointer}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b4c8e8}
 </style>
@@ -21,7 +21,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b4c8e8}
 <section class="panel"><h2>Create Mission</h2><label for="agent">Assign agent</label><select id="agent"></select>
 <label for="goal">Mission objective</label><textarea id="goal" rows="4" maxlength="4000" placeholder="Describe what you want to build or investigate..."></textarea>
 <label><input type="checkbox" id="use_ai"> Use configured AI model for planning</label><p>AI planning only; no code changes or deployments are executed.</p><button id="run">Generate Mission Plan</button><pre id="output" aria-live="polite"></pre></section>
-<section class="panel"><h2>Multi-Agent Mission</h2><p>Six agents coordinate on one plan. No code is executed.</p><textarea id="team-goal" rows="3" maxlength="4000" placeholder="Mission for the whole team"></textarea><label><input type="checkbox" id="team-ai"> Use configured AI provider</label><p><button id="team-run">Coordinate Agents</button></p><pre id="team-output" aria-live="polite"></pre></section><section class="panel"><h2>Project Memory</h2><input id="project" placeholder="Project name"><textarea id="note" placeholder="Remember a project decision or note"></textarea><button id="save-note">Save Note</button><button id="find-notes">Search Notes</button><pre id="notes-output"></pre></section><section class="panel"><h2>GitHub Intelligence (read-only)</h2><input id="repo" placeholder="owner/repository"><button id="inspect">Inspect Repository</button><pre id="repo-output"></pre></section><section class="panel"><h2>Mission History</h2><div id="history">No missions yet.</div></section></main>
+<section class="panel"><h2>Multi-Agent Mission</h2><p>Six agents coordinate on one plan. No code is executed.</p><textarea id="team-goal" rows="3" maxlength="4000" placeholder="Mission for the whole team"></textarea><label><input type="checkbox" id="team-ai"> Use configured AI provider</label><p><button id="team-run">Coordinate Agents</button></p><pre id="team-output" aria-live="polite"></pre></section><section class="panel"><h2>Project Memory</h2><input id="project" placeholder="Project name"><textarea id="note" placeholder="Remember a project decision or note"></textarea><button id="save-note">Save Note</button><button id="find-notes">Search Notes</button><pre id="notes-output"></pre></section><section class="panel"><h2>GitHub Intelligence (read-only)</h2><input id="repo" placeholder="owner/repository"><button id="inspect">Inspect Repository</button><pre id="repo-output"></pre></section><section class="panel"><h2>Approval Command Center</h2><p>Review proposals before future tool execution. Approvals do not run actions.</p><select id="action"><option value="inspect_repository">Inspect repository · low</option><option value="propose_patch">Propose patch · medium</option><option value="open_pull_request">Open pull request · high</option><option value="deploy">Deploy · critical</option></select><textarea id="proposal-summary" maxlength="2000" placeholder="Describe the proposed action"></textarea><input id="proposal-target" maxlength="300" placeholder="Target repository, file or environment"><button id="submit-proposal">Submit Proposal</button><pre id="proposal-status" aria-live="polite"></pre><div id="proposal-list"></div></section><section class="panel"><h2>Mission History</h2><div id="history">No missions yet.</div></section></main>
 <script>
 const $=id=>document.getElementById(id);
 async function load(){
@@ -69,5 +69,28 @@ $('team-run').onclick=async()=>{
   $('team-output').textContent=r.ok?data.orchestration.summary:data.error;
  }catch(e){$('team-output').textContent=e.message;}
 };
+async function proposals(){
+ const r=await fetch('/api/proposals');const data=await r.json();const area=$('proposal-list');area.replaceChildren();
+ for(const p of data.proposals){
+  const item=document.createElement('div');item.className='agent';item.style.marginTop='10px';
+  const line=document.createElement('p');line.textContent=p.action+' · '+p.risk+' · '+p.status+' · '+p.target;
+  const description=document.createElement('p');description.textContent=p.summary;item.append(line,description);
+  if(p.status==='pending'){
+   for(const decision of ['approved','rejected']){
+    const button=document.createElement('button');button.textContent=decision==='approved'?'Approve':'Reject';button.style.marginRight='8px';
+    button.onclick=async()=>{
+     if(!confirm('Mark this proposal '+decision+'? This does not execute any action.'))return;
+     const res=await fetch('/api/decisions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:p.id,decision})});
+     const result=await res.json();$('proposal-status').textContent=res.ok?'Decision recorded. No action executed.':result.error;await proposals();
+    };item.append(button);
+   }
+  }area.append(item);
+ }
+}
+$('submit-proposal').onclick=async()=>{
+ const r=await fetch('/api/proposals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:$('action').value,summary:$('proposal-summary').value,target:$('proposal-target').value})});
+ const result=await r.json();$('proposal-status').textContent=r.ok?'Proposal submitted for review.':result.error;await proposals();
+};
+proposals().catch(e=>$('proposal-status').textContent=e.message);
 load().catch(e=>$('output').textContent=e.message);
 </script></html>
