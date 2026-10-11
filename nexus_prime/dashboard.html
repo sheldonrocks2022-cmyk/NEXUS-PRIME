@@ -20,8 +20,8 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b4c8e8}
 <section class="panel"><h2>Agent Network</h2><div id="agents" class="grid"></div></section>
 <section class="panel"><h2>Create Mission</h2><label for="agent">Assign agent</label><select id="agent"></select>
 <label for="goal">Mission objective</label><textarea id="goal" rows="4" maxlength="4000" placeholder="Describe what you want to build or investigate..."></textarea>
-<button id="run">Generate Mission Plan</button><pre id="output" aria-live="polite"></pre></section>
-<section class="panel"><h2>Mission History</h2><div id="history">No missions yet.</div></section></main>
+<label><input type="checkbox" id="use_ai"> Use configured AI model for planning</label><p>AI planning only; no code changes or deployments are executed.</p><button id="run">Generate Mission Plan</button><pre id="output" aria-live="polite"></pre></section>
+<section class="panel"><h2>Project Memory</h2><input id="project" placeholder="Project name"><textarea id="note" placeholder="Remember a project decision or note"></textarea><button id="save-note">Save Note</button><button id="find-notes">Search Notes</button><pre id="notes-output"></pre></section><section class="panel"><h2>GitHub Intelligence (read-only)</h2><input id="repo" placeholder="owner/repository"><button id="inspect">Inspect Repository</button><pre id="repo-output"></pre></section><section class="panel"><h2>Mission History</h2><div id="history">No missions yet.</div></section></main>
 <script>
 const $=id=>document.getElementById(id);
 async function load(){
@@ -43,9 +43,23 @@ async function history(){
  }
 }
 $('run').onclick=async()=>{
- const response=await fetch('/api/missions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent:$('agent').value,goal:$('goal').value})});
+ const response=await fetch('/api/missions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent:$('agent').value,goal:$('goal').value,use_ai:$('use_ai').checked})});
  const data=await response.json();$('output').textContent=response.ok?data.mission.result:data.error;
  await history();
+};
+$('save-note').onclick=async()=>{
+ const r=await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:$('project').value,body:$('note').value})});
+ $('notes-output').textContent=JSON.stringify(await r.json(),null,2);
+};
+$('find-notes').onclick=async()=>{
+ const url='/api/notes?project='+encodeURIComponent($('project').value);
+ $('notes-output').textContent=JSON.stringify(await(await fetch(url)).json(),null,2);
+};
+$('inspect').onclick=async()=>{
+ const parts=$('repo').value.trim().split('/');
+ if(parts.length!==2){$('repo-output').textContent='Enter owner/repository';return;}
+ const r=await fetch('/api/github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({owner:parts[0],repo:parts[1]})});
+ $('repo-output').textContent=JSON.stringify(await r.json(),null,2);
 };
 load().catch(e=>$('output').textContent=e.message);
 </script></html>
