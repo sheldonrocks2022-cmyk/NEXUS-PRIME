@@ -98,7 +98,6 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(400, {"error": str(exc)})
         except KeyError as exc:
             self.respond(400, {"error": "Missing field or proposal: " + str(exc)})
-            self.respond(400, {"error": str(exc)})
         except Exception:
             self.respond(502, {"error": "External read failed"})
 
