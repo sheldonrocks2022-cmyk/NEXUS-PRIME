@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXUS PRIME — Command Center</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#090d19;color:#eaf0ff}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 80% 0%,#162956,#090d19 55%)}
+main{max-width:1050px;margin:auto;padding:36px 20px}
+small{color:#83a8ff;letter-spacing:3px;font-weight:700}
+h1{font-size:clamp(34px,6vw,60px);margin:12px 0}
+p{color:#9caecc} .panel{background:#101a30;border:1px solid #293958;border-radius:18px;padding:22px;margin-top:22px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.agent{background:#17243c;border:1px solid #304568;border-radius:12px;padding:16px}
+.agent b{color:#7dd9ff} .agent p{font-size:13px;margin-bottom:0}
+textarea,select{box-sizing:border-box;width:100%;background:#0b1427;color:#fff;border:1px solid #425879;border-radius:10px;padding:12px;margin:8px 0}
+button{background:#53a9ff;border:0;color:#061325;font-weight:800;border-radius:10px;padding:13px 22px;cursor:pointer}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b4c8e8}
+</style>
+<main><small>MISSION CONTROL / LOCAL DEVELOPMENT</small><h1>NEXUS <span style="color:#68c7ff">PRIME</span></h1>
+<p>Eight specialized agents. One command center. Human approval for external actions.</p>
+<section class="panel"><h2>Agent Network</h2><div id="agents" class="grid"></div></section>
+<section class="panel"><h2>Create Mission</h2><label for="agent">Assign agent</label><select id="agent"></select>
+<label for="goal">Mission objective</label><textarea id="goal" rows="4" maxlength="4000" placeholder="Describe what you want to build or investigate..."></textarea>
+<button id="run">Generate Mission Plan</button><pre id="output" aria-live="polite"></pre></section>
+<section class="panel"><h2>Mission History</h2><div id="history">No missions yet.</div></section></main>
+<script>
+const $=id=>document.getElementById(id);
+async function load(){
+ const agents=(await(await fetch('/api/agents')).json()).agents;
+ for(const [name,description] of Object.entries(agents)){
+  const card=document.createElement('div');card.className='agent';
+  const title=document.createElement('b');title.textContent=name.toUpperCase();
+  const detail=document.createElement('p');detail.textContent=description;
+  card.append(title,detail);$('agents').append(card);
+  const option=document.createElement('option');option.value=name;option.textContent=name.toUpperCase();$('agent').append(option);
+ }
+ await history();
+}
+async function history(){
+ const data=await(await fetch('/api/missions')).json();
+ $('history').replaceChildren();
+ for(const m of data.missions.slice().reverse()){
+  const p=document.createElement('p');p.textContent=m.agent.toUpperCase()+' · '+m.status+' · '+m.goal;$('history').append(p);
+ }
+}
+$('run').onclick=async()=>{
+ const response=await fetch('/api/missions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent:$('agent').value,goal:$('goal').value})});
+ const data=await response.json();$('output').textContent=response.ok?data.mission.result:data.error;
+ await history();
+};
+load().catch(e=>$('output').textContent=e.message);
+</script></html>
